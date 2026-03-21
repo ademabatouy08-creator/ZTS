@@ -8,7 +8,7 @@ const express = require('express');
 
 // --- SERVEUR WEB (ANTI-DODO RENDER) ---
 const app = express();
-app.get('/', (req, res) => res.send('ZTS OVERLORD V8 : SYSTEM ONLINE'));
+app.get('/', (req, res) => res.send('ZTS OVERLORD V9 : SYSTEM ONLINE'));
 app.listen(process.env.PORT || 10000);
 
 const client = new Client({
@@ -19,23 +19,22 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates
     ],
-    partials: [Partials.Channel, Partial.Message, Partials.GuildMember]
+    partials: [Partials.Channel, Partials.Message, Partials.GuildMember] // FIX APPORTÉ ICI (Partials avec un S)
 });
 
-// --- VARIABLES DE CONFIGURATION ---
+// --- VARIABLES DE STOCKAGE ---
 let logChannelId = null;
 let dispatchChannelId = null;
-let verifyRoleId = null;
-const shoppingList = new Map(); // Map pour gérer les quantités
+const shoppingList = new Map();
 const blacklist = new Map();
 const xpSystem = new Map();
 
-// --- INITIALISATION DU BOT ---
-client.once('clientReady', async () => {
-    console.log(`\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n🛡️ ZTS OVERLORD DÉPLOYÉ : ${client.user.tag}\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n`);
+// --- INITIALISATION ---
+client.once('ready', async () => {
+    console.log(`\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n🛡️ ZTS OVERLORD V9 DÉPLOYÉ : ${client.user.tag}\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n`);
     
     const commands = [
-        // --- SYSTÈME TACTIQUE DAYZ ---
+        // --- COMMANDES DE POSITION ---
         {
             name: 'position',
             description: '📍 Signalement tactique (Log-In/Out)',
@@ -46,101 +45,94 @@ client.once('clientReady', async () => {
                 { name: 'coords', type: 3, description: 'Coordonnées (ex: 045 120)', required: true }
             ]
         },
-        {
-            name: 'mort',
-            description: '💀 Signaler un décès pour récupération de stuff',
-            options: [{ name: 'coords', type: 3, description: 'Position du corps', required: true }]
-        },
+        { name: 'mort', description: '💀 Signaler un décès', options: [{ name: 'coords', type: 3, description: 'Position corps', required: true }] },
+        
+        // --- LOGISTIQUE & TEAM ---
         {
             name: 'besoin',
-            description: '🛒 Ajouter un item à la logistique base',
+            description: '🛒 Ajouter un item aux besoins base',
             options: [
-                { name: 'item', type: 3, description: 'Nom de l\'objet', required: true },
-                { name: 'quantite', type: 3, description: 'Combien ?', required: true }
+                { name: 'item', type: 3, description: 'Nom objet', required: true },
+                { name: 'quantite', type: 3, description: 'Nombre', required: true }
             ]
         },
-        { name: 'liste-besoin', description: '📋 Voir l\'inventaire manquant de la base' },
+        { name: 'liste-besoin', description: '📋 Voir l\'inventaire manquant' },
         {
-            name: 'blacklist',
-            description: '🚫 Ficher un ennemi PSN',
-            options: [
-                { name: 'psn', type: 3, description: 'ID PSN de l\'ennemi', required: true },
-                { name: 'raison', type: 3, description: 'Motif du fichage', required: true }
-            ]
+            name: 'meteo',
+            description: '☁️ Rapporter la météo sur le serveur',
+            options: [{ name: 'temps', type: 3, required: true, choices: [{name:'☀️ Soleil', value:'soleil'}, {name:'🌧️ Pluie', value:'pluie'}, {name:'🌫️ Brouillard', value:'brouillard'}] }]
         },
-
-        // --- COMMANDES DE STRUCTURE & ADMIN ---
-        { name: 'raid', description: '🚨 ALERTE ROUGE : Raid en cours', options: [{name:'lieu', type:3, description:'Position de l\'attaque', required:true}] },
-        { name: 'set-logs', description: '⚙️ Configurer le salon des logs', options: [{name:'salon', type:7, description:'Salon cible', required:true}] },
-        { name: 'set-dispatch', description: '🛰️ Configurer le salon de traçage', options: [{name:'salon', type:7, description:'Salon cible', required:true}] },
-        { name: 'setup-recrutement', description: '👑 Créer l\'interface de recrutement' },
-        { name: 'clear', description: '🧹 Nettoyer le chat', options: [{name:'nombre', type:4, description:'Nombre de messages', required:true}] },
-        { name: 'rank', description: '🎖️ Voir ton grade au sein de la ZTS' }
+        
+        // --- ADMIN & CONFIG ---
+        { name: 'raid', description: '🚨 ALERTE ROUGE RAID', options: [{name:'lieu', type:3, description:'Lieu', required:true}] },
+        { name: 'set-logs', description: '⚙️ Config logs admin', options: [{name:'salon', type:7, required:true}] },
+        { name: 'set-dispatch', description: '🛰️ Config salon traçage', options: [{name:'salon', type:7, required:true}] },
+        { name: 'setup-recrutement', description: '👑 Interface recrutement' },
+        { name: 'rank', description: '🎖️ Ton grade ZTS' },
+        { name: 'clear', description: '🧹 Nettoyer chat', options: [{name:'nombre', type:4, required:true}] }
     ];
 
     try {
         await client.application.commands.set(commands);
-        console.log("✅ Commandes Titan synchronisées.");
+        console.log("💎 Interface Tactique ZTS Synchronisée.");
     } catch (e) { console.error("❌ Erreur synchro :", e); }
 });
 
-// --- GESTION DES COMMANDES SLASH ---
+// --- INTERACTIONS ---
 client.on('interactionCreate', async i => {
     if (!i.isChatInputCommand()) return;
 
-    // 1. POSITIONING SYSTEM
+    // POSITION SYSTEM
     if (i.commandName === 'position') {
         const et = i.options.getString('etat');
         const ty = i.options.getString('type');
         const srv = i.options.getString('serveur').substring(0, 4).toUpperCase();
         const co = i.options.getString('coords');
-
         if (!dispatchChannelId) return i.reply({ content: "⚠️ Dispatch non configuré.", flags: MessageFlags.Ephemeral });
 
         const isSpawn = et === 'spawn';
         const embed = new EmbedBuilder()
             .setAuthor({ name: `SURVIVANT : ${i.user.username}`, iconURL: i.user.displayAvatarURL() })
             .setTitle(isSpawn ? '🟢 SIGNAL : IN-GAME' : '🟠 SIGNAL : OUT-GAME')
-            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n**STATUS :** \`${ty}\`\n**SERVEUR :** \`${srv}\`\n**COORDONNÉES :** \`${co}\`\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
+            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n**LIEU :** \`${ty}\`\n**SERVEUR :** \`${srv}\`\n**COORDONNÉES :** \`${co}\`\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
             .setColor(isSpawn ? '#2ecc71' : '#e67e22')
             .setTimestamp();
 
         const ch = i.guild.channels.cache.get(dispatchChannelId);
         if (ch) ch.send({ embeds: [embed] });
-        return i.reply({ content: `✅ Transmission effectuée.`, flags: MessageFlags.Ephemeral });
+        return i.reply({ content: `✅ Signal ${et} transmis.`, flags: MessageFlags.Ephemeral });
     }
 
-    // 2. LOGISTIQUE
+    // RAID SYSTEM
+    if (i.commandName === 'raid') {
+        const lieu = i.options.getString('lieu');
+        const embed = new EmbedBuilder()
+            .setTitle('🚨 ALERTE RAID : ZTS UNIT 🚨')
+            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n**COORDONNÉES :** ${lieu}\n**STATUT :** MOBILISATION MAXIMALE\n**UNITÉ :** @everyone\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
+            .setColor('#ff0000');
+        return i.reply({ content: '⚔️ **ALERTE GÉNÉRALE !**', embeds: [embed] });
+    }
+
+    // LOGISTIQUE
     if (i.commandName === 'besoin') {
         const item = i.options.getString('item');
         const qte = i.options.getString('quantite');
         shoppingList.set(item, { qte, user: i.user.username });
-        return i.reply(`🛒 **Logistique :** \`${qte}x ${item}\` ajouté à la liste par **${i.user.username}**.`);
+        return i.reply(`🛒 **Logistique :** \`${qte}x ${item}\` ajouté à la liste.`);
     }
 
     if (i.commandName === 'liste-besoin') {
         let content = "";
-        shoppingList.forEach((val, key) => { content += `• **${key}** (x${val.qte}) - *par ${val.user}*\n`; });
-        const listEmb = new EmbedBuilder()
-            .setTitle('📋 INVENTAIRE DES BESOINS - ZTS')
+        shoppingList.forEach((v, k) => content += `• **${k}** (x${v.qte}) - *par ${v.user}*\n`);
+        const embed = new EmbedBuilder()
+            .setTitle('📋 BESOINS LOGISTIQUES ZTS')
             .setColor('#3498db')
-            .setDescription(content || "Aucun besoin enregistré. La base est full !")
-            .setFooter({ text: 'ZTS Logistics' });
-        return i.reply({ embeds: [listEmb] });
+            .setDescription(content || "La base est opérationnelle (Aucun besoin).")
+            .setFooter({ text: 'ZTS Tactical Unit' });
+        return i.reply({ embeds: [embed] });
     }
 
-    // 3. RAID & COMBAT
-    if (i.commandName === 'raid') {
-        const lieu = i.options.getString('lieu');
-        const raidEmb = new EmbedBuilder()
-            .setTitle('🚨 ALERTE ROUGE : RAID EN COURS 🚨')
-            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n**OBJECTIF :** ${lieu}\n**PRIORITÉ :** IMMÉDIATE\n**UNITÉ :** @everyone\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
-            .setColor('#ff0000')
-            .setTimestamp();
-        return i.reply({ content: '⚔️ **MOBILISATION GÉNÉRALE !**', embeds: [raidEmb] });
-    }
-
-    // 4. CONFIGURATION
+    // CONFIGURATION
     if (i.commandName === 'set-logs') {
         if (!i.member.permissions.has(PermissionFlagsBits.Administrator)) return i.reply("Admin requis.");
         logChannelId = i.options.getChannel('salon').id;
@@ -153,94 +145,80 @@ client.on('interactionCreate', async i => {
         return i.reply(`✅ Dispatch configuré dans <#${dispatchChannelId}>.`);
     }
 
-    // 5. RECRUTEMENT INTERFACE
-    if (i.commandName === 'setup-recrutement') {
-        const emb = new EmbedBuilder()
-            .setTitle('👑 REJOINDRE LA UNITÉ ZTS')
-            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\nVous souhaitez intégrer une team organisée sur DayZ PS5 ?\n\n**Pré-requis :**\n• Micro obligatoire\n• Maturité & Respect\n• Esprit d'équipe\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
-            .setColor('#2b2d31');
-        const btn = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('rec_btn').setLabel('Déposer Candidature').setStyle(ButtonStyle.Secondary).setEmoji('🎖️')
-        );
-        return i.reply({ embeds: [emb], components: [btn] });
+    // METEO
+    if (i.commandName === 'meteo') {
+        const t = i.options.getString('temps');
+        return i.reply(`☁️ **MÉTÉO DAYZ :** Un survivant rapporte du temps : **${t}**. Préparez vos équipements !`);
     }
-    
-    // 6. CLEAR
+
+    // RECRUTEMENT
+    if (i.commandName === 'setup-recrutement') {
+        const embed = new EmbedBuilder()
+            .setTitle('👑 UNITÉ ZTS - RECRUTEMENT PS5')
+            .setDescription(`▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\nRejoignez l'élite des survivants.\n\n**REQUIS :**\n• +18 ans de préférence\n• Connaissance Map\n• Disponibilité Soirée\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
+            .setColor('#000000');
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('rec_btn').setLabel('Postuler').setStyle(ButtonStyle.Danger));
+        return i.reply({ embeds: [embed], components: [row] });
+    }
+
+    // CLEAR
     if (i.commandName === 'clear') {
         const amount = i.options.getInteger('nombre');
         await i.channel.bulkDelete(amount, true);
-        return i.reply({ content: `🧹 \`${amount}\` messages supprimés.`, flags: MessageFlags.Ephemeral });
+        return i.reply({ content: `🧹 Nettoyage de \`${amount}\` messages effectué.`, flags: MessageFlags.Ephemeral });
     }
 });
 
-// --- GESTION DES BOUTONS & MODALS (RECRUTEMENT) ---
+// --- BOUTONS & MODALS ---
 client.on('interactionCreate', async i => {
     if (i.isButton() && i.customId === 'rec_btn') {
-        const modal = new ModalBuilder().setCustomId('m_rec').setTitle('Formulaire de Recrue ZTS');
-        const a = new TextInputBuilder().setCustomId('age').setLabel("Âge / Heures de jeu").setStyle(TextInputStyle.Short).setRequired(true);
-        const p = new TextInputBuilder().setCustomId('psn').setLabel("Ton ID PSN").setStyle(TextInputStyle.Short).setRequired(true);
-        const s = new TextInputBuilder().setCustomId('spe').setLabel("Spécialité (PVP, Builder, Farmer)").setStyle(TextInputStyle.Paragraph).setRequired(true);
-        
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(a),
-            new ActionRowBuilder().addComponents(p),
-            new ActionRowBuilder().addComponents(s)
-        );
+        const modal = new ModalBuilder().setCustomId('m_rec').setTitle('Dossier Recrue ZTS');
+        const a = new TextInputBuilder().setCustomId('a').setLabel("Âge / Heures de jeu").setStyle(TextInputStyle.Short).setRequired(true);
+        const p = new TextInputBuilder().setCustomId('p').setLabel("ID PSN").setStyle(TextInputStyle.Short).setRequired(true);
+        const s = new TextInputBuilder().setCustomId('s').setLabel("Pourquoi toi ?").setStyle(TextInputStyle.Paragraph).setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(a), new ActionRowBuilder().addComponents(p), new ActionRowBuilder().addComponents(s));
         return await i.showModal(modal);
     }
 
     if (i.isModalSubmit() && i.customId === 'm_rec') {
-        const age = i.fields.getTextInputValue('age');
-        const psn = i.fields.getTextInputValue('psn');
-        const spe = i.fields.getTextInputValue('spe');
-
-        const recLog = new EmbedBuilder()
-            .setTitle('📥 NOUVELLE CANDIDATURE')
+        const age = i.fields.getTextInputValue('a');
+        const psn = i.fields.getTextInputValue('p');
+        const spe = i.fields.getTextInputValue('s');
+        const embed = new EmbedBuilder()
+            .setTitle('📥 NOUVELLE RECRUE')
             .setColor('Gold')
-            .addFields(
-                { name: '👤 Survivant', value: `${i.user}`, inline: true },
-                { name: '🎮 ID PSN', value: psn, inline: true },
-                { name: '⏳ Heures', value: age, inline: true },
-                { name: '🛡️ Profil', value: `\`\`\`${spe}\`\`\`` }
-            ).setTimestamp();
-
-        await i.reply({ content: "🫡 Ta candidature a été envoyée au haut commandement.", flags: MessageFlags.Ephemeral });
-        const ch = i.guild.channels.cache.find(c => c.name.includes('recrutement') || c.name.includes('log'));
-        if (ch) ch.send({ embeds: [recLog] });
+            .addFields({name:'Survivant', value:`${i.user}`, inline:true}, {name:'PSN', value:psn, inline:true}, {name:'Exp', value:age, inline:true}, {name:'Profil', value:`\`\`\`${spe}\`\`\``})
+            .setTimestamp();
+        await i.reply({ content: "Dossier envoyé au Haut Commandement ZTS.", flags: MessageFlags.Ephemeral });
+        const ch = i.guild.channels.cache.find(c => c.name.includes('recrut') || c.name.includes('log'));
+        if (ch) ch.send({ embeds: [embed] });
     }
-});
-
-// --- SYSTÈME D'XP ET DE GRADE ---
-client.on('messageCreate', m => {
-    if (m.author.bot || !m.guild) return;
-    let data = xpSystem.get(m.author.id) || { xp: 0, rank: 'Soldat' };
-    data.xp += 1;
-    if (data.xp > 50) data.rank = 'Caporal';
-    if (data.xp > 200) data.rank = 'Sergent';
-    if (data.xp > 500) data.rank = 'Lieutenant';
-    xpSystem.set(m.author.id, data);
 });
 
 // --- LOGS MESSAGES SUPPRIMÉS ---
 client.on('messageDelete', async m => {
     if (!logChannelId || m.author?.bot) return;
-    const logChan = m.guild.channels.cache.get(logChannelId);
-    if (logChan) {
-        const delEmb = new EmbedBuilder()
-            .setTitle('🗑️ MESSAGE SUPPRIMÉ')
+    const ch = m.guild.channels.cache.get(logChannelId);
+    if (ch) {
+        const emb = new EmbedBuilder()
+            .setTitle('🗑️ LOG : MESSAGE SUPPRIMÉ')
             .setColor('#e74c3c')
-            .addFields(
-                { name: 'Auteur', value: `${m.author.tag}`, inline: true },
-                { name: 'Salon', value: `${m.channel}`, inline: true },
-                { name: 'Contenu', value: `\`\`\`${m.content || "Fichier/Embed"}\`\`\`` }
-            );
-        logChan.send({ embeds: [delEmb] });
+            .addFields({name:'Auteur', value:`${m.author}`, inline:true}, {name:'Salon', value:`${m.channel}`, inline:true}, {name:'Contenu', value:`\`\`\`${m.content || "Fichier"}\`\`\``});
+        ch.send({ embeds: [emb] });
     }
 });
 
-// --- ANTI-CRASH ---
-process.on('unhandledRejection', (reason, promise) => {
-    console.log('🛡️ ANTI-CRASH : Erreur détectée\n', reason);
+// --- SYSTÈME XP ---
+client.on('messageCreate', m => {
+    if (m.author.bot || !m.guild) return;
+    let d = xpSystem.get(m.author.id) || { xp: 0, r: 'Recrue' };
+    d.xp += 1;
+    if (d.xp > 100) d.r = 'Éclaireur';
+    if (d.xp > 500) d.r = 'Officier';
+    xpSystem.set(m.author.id, d);
 });
+
+// --- ANTI-CRASH ---
+process.on('unhandledRejection', (r) => console.log('🛡️ ANTI-CRASH :', r));
 
 client.login(process.env.BOT_TOKEN);
