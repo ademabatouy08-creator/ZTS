@@ -6,165 +6,186 @@ const {
 } = require('discord.js');
 const express = require('express');
 
+// --- KEEP-ALIVE RENDER ---
 const app = express();
-app.get('/', (req, res) => res.send('ZTS GENESIS V2 IS ONLINE'));
+app.get('/', (req, res) => res.send('ZTS TITAN PS5 IS ACTIVE'));
 app.listen(process.env.PORT || 10000);
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers
-    ],
-    partials: [Partials.Channel, Partials.Message, Partials.GuildMember]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+    partials: [Partials.Channel, Partials.Message]
 });
 
-let autoRoleId = null;
-let logChannelId = null;
+// --- VARIABLES DE CONFIGURATION ---
+let dispatchChannelId = null;
+const blacklist = new Map();
 
 client.once('clientReady', async () => {
-    console.log(`🔱 ZTS FIX : ${client.user.tag}`);
+    console.log(`🎮 ZTS TITAN PS5 CONNECTÉ : ${client.user.tag}`);
     
     const commands = [
+        // --- SYSTÈME DE POSITION (SPAWN/DESPAWN) ---
+        {
+            name: 'position',
+            description: '📍 Signaler un Log-In ou Log-Off (ZTS)',
+            options: [
+                { 
+                    name: 'etat', 
+                    type: 3, 
+                    description: 'Action', 
+                    required: true, 
+                    choices: [{name: '📥 Connexion (Spawn)', value: 'spawn'}, {name: '📤 Déconnexion (Despawn)', value: 'despawn'}] 
+                },
+                { 
+                    name: 'type', 
+                    type: 3, 
+                    description: 'Type de lieu', 
+                    required: true, 
+                    choices: [{name: '👤 Position Perso', value: 'Perso'}, {name: '🏰 Base Team', value: 'Base'}, {name: '📦 Cache / Loot', value: 'Cache'}] 
+                },
+                { name: 'serveur', type: 3, description: 'Code serv (Max 4 car. ex: DE22)', required: true },
+                { name: 'coords', type: 3, description: 'Coordonnées (ex: 045 120)', required: true },
+                { name: 'details', type: 3, description: 'Détails (ex: Dans le sapin)', required: false }
+            ]
+        },
+        // --- COMMANDES TACTIQUES ---
+        {
+            name: 'raid',
+            description: '🚨 ALERTE RAID : Mobilisation team ZTS',
+            options: [{ name: 'lieu', type: 3, description: 'Où ça pète ?', required: true }]
+        },
+        {
+            name: 'blacklist',
+            description: '🚫 Ficher un ennemi ou un traître',
+            options: [
+                { name: 'nom', type: 3, description: 'Pseudo PSN', required: true },
+                { name: 'raison', type: 3, description: 'Pourquoi ?', required: true }
+            ]
+        },
+        {
+            name: 'set-dispatch',
+            description: '⚙️ Définir le salon où s\'affichent les positions',
+            options: [{ name: 'salon', type: 7, description: 'Salon de traçage', required: true }]
+        },
+        // --- GESTION TICKETS/LOGS ---
+        { name: 'setup-recrutement', description: 'Bouton candidature ZTS' },
         {
             name: 'setup-embed',
-            description: 'Créer un socle d\'embed',
+            description: 'Créer un magnifique embed',
             options: [
-                { name: 'salon', type: 7, description: 'Salon de l\'annonce', required: true },
-                { name: 'titre', type: 3, description: 'Titre de l\'embed', required: true },
-                { name: 'desc', type: 3, description: 'Description de l\'embed', required: true }
+                { name: 'salon', type: 7, description: 'Salon', required: true },
+                { name: 'titre', type: 3, description: 'Titre', required: true },
+                { name: 'desc', type: 3, description: 'Texte', required: true }
             ]
-        },
-        {
-            name: 'add-option',
-            description: 'Ajouter un bouton Ticket ou Rôle',
-            options: [
-                { name: 'msg_id', type: 3, description: 'ID du message de l\'embed', required: true },
-                { name: 'type', type: 3, description: 'Type de bouton', required: true, choices: [{name:'Ticket', value:'tk'}, {name:'Rôle', value:'rl'}] },
-                { name: 'nom', type: 3, description: 'Nom affiché sur le bouton', required: true },
-                { name: 'cible', type: 8, description: 'Rôle à donner ou à ping', required: true }
-            ]
-        },
-        {
-            name: 'set-logs',
-            description: 'Configurer le salon des logs',
-            options: [{ name: 'salon', type: 7, description: 'Salon pour les logs admin', required: true }]
-        },
-        {
-            name: 'set-autorole',
-            description: 'Configurer le rôle automatique',
-            options: [{ name: 'role', type: 8, description: 'Rôle donné à l\'arrivée', required: true }]
-        },
-        {
-            name: 'purge',
-            description: 'Réinitialise le salon actuel (Attention !)'
-        },
-        {
-            name: 'kick',
-            description: 'Expulser un membre',
-            options: [
-                { name: 'membre', type: 6, description: 'Le membre à expulser', required: true },
-                { name: 'raison', type: 3, description: 'La raison du kick', required: false }
-            ]
-        },
-        {
-            name: 'meme',
-            description: 'Affiche un meme aléatoire'
         }
     ];
 
     try {
         await client.application.commands.set(commands);
-        console.log("✅ Commandes synchronisées avec succès !");
-    } catch (err) {
-        console.error("Erreur de synchro :", err);
-    }
+        console.log("💎 Interface Tactique ZTS Synchronisée.");
+    } catch (e) { console.error(e); }
 });
 
 client.on('interactionCreate', async i => {
-    if (i.isChatInputCommand()) {
-        
-        // --- NUKE ---
-        if (i.commandName === 'nuke') {
-            if (!i.member.permissions.has(PermissionFlagsBits.ManageChannels)) return i.reply({content: "Permissions insuffisantes.", flags: MessageFlags.Ephemeral});
-            const position = i.channel.position;
-            const newChan = await i.channel.clone();
-            await i.channel.delete();
-            await newChan.setPosition(position);
-            return newChan.send("☢️ **Salon réinitialisé par ZTS Protection.**");
-        }
+    if (!i.isChatInputCommand()) return;
 
-        if (i.commandName === 'setup-embed') {
-            const channel = i.options.getChannel('salon');
-            const embed = new EmbedBuilder()
-                .setTitle(`💎 ${i.options.getString('titre')}`)
-                .setDescription(i.options.getString('desc'))
-                .setColor('#2B2D31')
-                .setTimestamp();
-            await channel.send({ embeds: [embed] });
-            return i.reply({ content: "✅ Embed envoyé.", flags: MessageFlags.Ephemeral });
-        }
--
-        if (i.commandName === 'set-logs') {
-            logChannelId = i.options.getChannel('salon').id;
-            return i.reply(`✅ Salon de logs défini sur <#${logChannelId}>`);
-        }
+    // --- LOGIQUE DE POSITION (L'ÉLÉMENT CENTRAL) ---
+    if (i.commandName === 'position') {
+        const etat = i.options.getString('etat');
+        const type = i.options.getString('type');
+        const serv = i.options.getString('serveur').substring(0, 4).toUpperCase();
+        const coords = i.options.getString('coords');
+        const details = i.options.getString('details') || 'Aucun détail';
 
-        if (i.commandName === 'set-autorole') {
-            autoRoleId = i.options.getRole('role').id;
-            return i.reply(`✅ Auto-role défini sur <@&${autoRoleId}>`);
-        }
+        if (!dispatchChannelId) return i.reply({ content: "⚠️ Le salon de dispatch n'est pas configuré. (/set-dispatch)", flags: MessageFlags.Ephemeral });
+
+        const isSpawn = etat === 'spawn';
+        const embed = new EmbedBuilder()
+            .setAuthor({ name: i.user.username, iconURL: i.user.displayAvatarURL() })
+            .setTitle(isSpawn ? `📥 CONNEXION : ${type}` : `📤 DÉCONNEXION : ${type}`)
+            .setColor(isSpawn ? '#00FF00' : '#FF4500')
+            .addFields(
+                { name: '🎮 Serveur', value: `\`${serv}\``, inline: true },
+                { name: '📍 Coordonnées', value: `\`${coords}\``, inline: true },
+                { name: '📝 Infos', value: details }
+            )
+            .setThumbnail(isSpawn ? 'https://i.imgur.com/vH9v5Z9.png' : 'https://i.imgur.com/K3Zp8N6.png')
+            .setFooter({ text: `ZTS DayZ Unit • PS5 Version` })
+            .setTimestamp();
+
+        const channel = i.guild.channels.cache.get(dispatchChannelId);
+        if (channel) await channel.send({ embeds: [embed] });
+
+        return i.reply({ content: `✅ Ton **${etat}** a été enregistré dans <#${dispatchChannelId}>.`, flags: MessageFlags.Ephemeral });
     }
 
+    // --- SET DISPATCH ---
+    if (i.commandName === 'set-dispatch') {
+        if (!i.member.permissions.has(PermissionFlagsBits.Administrator)) return i.reply("Admin seulement.");
+        dispatchChannelId = i.options.getChannel('salon').id;
+        return i.reply(`🛰️ Le traçage des survivants est maintenant actif dans <#${dispatchChannelId}>.`);
+    }
+
+    // --- RAID ALERT ---
+    if (i.commandName === 'raid') {
+        const lieu = i.options.getString('lieu');
+        const raidEmb = new EmbedBuilder()
+            .setTitle('🚨 ALERTE RAID - UNITÉ ZTS 🚨')
+            .setDescription(`**MOBILISATION GÉNÉRALE DEMANDÉE !**\n\n📍 **OBJECTIF :** ${lieu}\n🎮 **PRIORITÉ :** MAXIMALE`)
+            .setColor('#FF0000')
+            .setImage('https://i.imgur.com/8N7mZ6m.png')
+            .setTimestamp();
+
+        return i.reply({ content: '@everyone ⚔️ **CONTACT ENNEMI !**', embeds: [raidEmb] });
+    }
+
+    // --- BLACKLIST ---
+    if (i.commandName === 'blacklist') {
+        const nom = i.options.getString('nom');
+        const raison = i.options.getString('raison');
+        const blEmb = new EmbedBuilder()
+            .setTitle('🚫 BLACKLIST - ENNEMI PUBLIC')
+            .addFields({ name: 'PSN ID', value: `\`${nom}\``, inline: true }, { name: 'Crime', value: raison })
+            .setColor('#2F3136')
+            .setThumbnail('https://i.imgur.com/rN9S7aG.png');
+        
+        return i.reply({ embeds: [blEmb] });
+    }
+});
+
+// --- SYSTÈME DE TICKETS / RECRUTEMENT (Le classique ZTS) ---
+client.on('interactionCreate', async i => {
     if (i.isButton()) {
-        if (i.customId.startsWith('tk_')) {
-            const [_, roleId, label] = i.customId.split('_');
-            const modal = new ModalBuilder().setCustomId(`m_${roleId}_${label}`).setTitle(`Support : ${label}`);
-            const input = new TextInputBuilder().setCustomId('r').setLabel("Raison de l'ouverture").setStyle(TextInputStyle.Paragraph).setRequired(true);
-            modal.addComponents(new ActionRowBuilder().addComponents(input));
+        if (i.customId === 'recruit_btn') {
+            const modal = new ModalBuilder().setCustomId('rec_m').setTitle('Recrutement ZTS');
+            const a = new TextInputBuilder().setCustomId('age').setLabel("Âge / Heures DayZ").setStyle(TextInputStyle.Short).setRequired(true);
+            const p = new TextInputBuilder().setCustomId('psn').setLabel("Ton ID PSN").setStyle(TextInputStyle.Short).setRequired(true);
+            const s = new TextInputBuilder().setCustomId('spe').setLabel("Ta spécialité").setStyle(TextInputStyle.Paragraph).setRequired(true);
+            modal.addComponents(new ActionRowBuilder().addComponents(a), new ActionRowBuilder().addComponents(p), new ActionRowBuilder().addComponents(s));
             return await i.showModal(modal);
         }
-
-        if (i.customId.startsWith('rl_')) {
-            const rId = i.customId.split('_')[1];
-            if (i.member.roles.cache.has(rId)) {
-                await i.member.roles.remove(rId);
-                return i.reply({ content: "Rôle retiré ➖", flags: MessageFlags.Ephemeral });
-            } else {
-                await i.member.roles.add(rId);
-                return i.reply({ content: "Rôle ajouté ➕", flags: MessageFlags.Ephemeral });
-            }
-        }
     }
 
-    if (i.isModalSubmit() && i.customId.startsWith('m_')) {
-        const [_, rId, lab] = i.customId.split('_');
-        const reason = i.fields.getTextInputValue('r');
-        const chan = await i.guild.channels.create({
-            name: `ticket-${lab}-${i.user.username}`,
-            type: ChannelType.GuildText,
-            permissionOverwrites: [
-                { id: i.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: i.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                { id: rId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-            ],
-        });
-        await chan.send({ content: `<@&${rId}>`, embeds: [new EmbedBuilder().setTitle(lab).setDescription(`Auteur: ${i.user}\nRaison: ${reason}`).setColor('Blue')] });
-        return i.reply({ content: `✅ Ticket créé : ${chan}`, flags: MessageFlags.Ephemeral });
+    if (i.isModalSubmit() && i.customId === 'rec_m') {
+        const age = i.fields.getTextInputValue('age');
+        const psn = i.fields.getTextInputValue('psn');
+        const spe = i.fields.getTextInputValue('spe');
+        
+        const log = new EmbedBuilder()
+            .setTitle('📥 NOUVELLE RECRUE ZTS')
+            .setColor('Gold')
+            .addFields(
+                { name: 'Membre', value: `${i.user}`, inline: true },
+                { name: 'PSN', value: psn, inline: true },
+                { name: 'Expérience', value: age, inline: true },
+                { name: 'Spécialité', value: spe }
+            );
+
+        await i.reply({ content: "✅ Candidature envoyée !", flags: MessageFlags.Ephemeral });
+        const logChan = i.guild.channels.cache.find(c => c.name.includes('recrutement'));
+        if (logChan) logChan.send({ embeds: [log] });
     }
 });
 
-client.on('messageDelete', async m => {
-    if (!logChannelId || m.author?.bot) return;
-    const logChan = m.guild.channels.cache.get(logChannelId);
-    if (logChan) {
-        const logEmb = new EmbedBuilder().setTitle('🗑️ Message Supprimé').setColor('Red').addFields({name:'Auteur', value:`${m.author}`, inline:true}, {name:'Salon', value:`${m.channel}`, inline:true}, {name:'Message', value:`\`\`\`${m.content || "Image"}\`\`\``});
-        logChan.send({ embeds: [logEmb] });
-    }
-});
-
-client.on('guildMemberAdd', member => {
-    if (autoRoleId) member.roles.add(autoRoleId).catch(() => {});
-});
-
-process.on('unhandledRejection', e => console.log('ANTI-CRASH :', e));
+process.on('unhandledRejection', e => console.log('🛡️ ANTI-CRASH :', e));
 client.login(process.env.BOT_TOKEN);
