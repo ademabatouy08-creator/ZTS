@@ -1,0 +1,12 @@
+{
+  "name": "zts-bot",
+  "version": "1.0.0",
+  "description": "Bot de tickets flexible",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  }
+}
