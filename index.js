@@ -22,9 +22,8 @@ let autoRoleId = null;
 let logChannelId = null;
 
 client.once('clientReady', async () => {
-    console.log(`🔱 ZTS GENESIS FIX : ${client.user.tag}`);
+    console.log(`🔱 ZTS FIX : ${client.user.tag}`);
     
-    // --- LES COMMANDES (Toutes avec descriptions obligatoires) ---
     const commands = [
         {
             name: 'setup-embed',
@@ -56,7 +55,7 @@ client.once('clientReady', async () => {
             options: [{ name: 'role', type: 8, description: 'Rôle donné à l\'arrivée', required: true }]
         },
         {
-            name: 'nuke',
+            name: 'purge',
             description: 'Réinitialise le salon actuel (Attention !)'
         },
         {
@@ -77,7 +76,7 @@ client.once('clientReady', async () => {
         await client.application.commands.set(commands);
         console.log("✅ Commandes synchronisées avec succès !");
     } catch (err) {
-        console.error("❌ Erreur de synchro :", err);
+        console.error("Erreur de synchro :", err);
     }
 });
 
@@ -94,7 +93,6 @@ client.on('interactionCreate', async i => {
             return newChan.send("☢️ **Salon réinitialisé par ZTS Protection.**");
         }
 
-        // --- SETUP EMBED ---
         if (i.commandName === 'setup-embed') {
             const channel = i.options.getChannel('salon');
             const embed = new EmbedBuilder()
@@ -105,8 +103,7 @@ client.on('interactionCreate', async i => {
             await channel.send({ embeds: [embed] });
             return i.reply({ content: "✅ Embed envoyé.", flags: MessageFlags.Ephemeral });
         }
-
-        // --- CONFIG ---
+-
         if (i.commandName === 'set-logs') {
             logChannelId = i.options.getChannel('salon').id;
             return i.reply(`✅ Salon de logs défini sur <#${logChannelId}>`);
@@ -118,7 +115,6 @@ client.on('interactionCreate', async i => {
         }
     }
 
-    // --- BOUTONS (Ticket / Rôle) ---
     if (i.isButton()) {
         if (i.customId.startsWith('tk_')) {
             const [_, roleId, label] = i.customId.split('_');
@@ -140,7 +136,6 @@ client.on('interactionCreate', async i => {
         }
     }
 
-    // --- MODAL SUBMIT ---
     if (i.isModalSubmit() && i.customId.startsWith('m_')) {
         const [_, rId, lab] = i.customId.split('_');
         const reason = i.fields.getTextInputValue('r');
@@ -158,7 +153,6 @@ client.on('interactionCreate', async i => {
     }
 });
 
-// --- LOGS AUTOMATIQUES ---
 client.on('messageDelete', async m => {
     if (!logChannelId || m.author?.bot) return;
     const logChan = m.guild.channels.cache.get(logChannelId);
@@ -168,10 +162,9 @@ client.on('messageDelete', async m => {
     }
 });
 
-// --- AUTO-ROLE ---
 client.on('guildMemberAdd', member => {
     if (autoRoleId) member.roles.add(autoRoleId).catch(() => {});
 });
 
-process.on('unhandledRejection', e => console.log('🛡️ ANTI-CRASH :', e));
+process.on('unhandledRejection', e => console.log('ANTI-CRASH :', e));
 client.login(process.env.BOT_TOKEN);
