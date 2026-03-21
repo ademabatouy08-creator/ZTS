@@ -6,228 +6,160 @@ const {
 } = require('discord.js');
 const express = require('express');
 
-// --- SERVEUR KEEP-ALIVE ---
+// --- SERVEUR WEB ANTI-DODO ---
 const app = express();
-app.get('/', (req, res) => res.send('ZTS OMNI-TITAN IS ACTIVE'));
+app.get('/', (req, res) => res.send('ZTS GENESIS STATUS: GOD MODE ACTIVATED'));
 app.listen(process.env.PORT || 10000);
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildPresences
+        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates
     ],
-    partials: [Partials.Channel, Partials.GuildMember, Partials.User]
+    partials: [Partials.Channel, Partials.Message, Partials.GuildMember]
 });
 
-// --- VARIABLES DE CONFIGURATION ---
-let welcomeChannelId = null;
-const pollVotes = new Map(); // Stockage des votes pour les sondages
+// --- VARIABLES & DATABASES ---
+let autoRoleId = null;
+let logChannelId = null;
+const xp = new Map();
+const giveaways = new Map();
 
 client.once('clientReady', async () => {
-    console.log(`🚀 ZTS OMNI-TITAN Connecté : ${client.user.tag}`);
-    
+    console.log(`🔱 ZTS GENESIS DÉPLOYÉ : ${client.user.tag}`);
     const commands = [
-        {
-            name: 'setup-embed',
-            description: 'Créer un embed pro',
-            options: [
-                { name: 'salon', type: 7, description: 'Salon', required: true },
-                { name: 'titre', type: 3, description: 'Titre', required: true },
-                { name: 'description', type: 3, description: 'Texte', required: true }
-            ]
-        },
-        {
-            name: 'add-option',
-            description: 'Ajouter un bouton (Ticket ou Rôle)',
-            options: [
-                { name: 'message_id', type: 3, description: 'ID du message', required: true },
-                { name: 'type', type: 3, description: 'Type', required: true, choices: [{name:'Ticket', value:'tk'}, {name:'Rôle', value:'rl'}] },
-                { name: 'nom', type: 3, description: 'Label', required: true },
-                { name: 'cible', type: 8, description: 'Rôle', required: true },
-                { name: 'emoji', type: 3, description: 'Emoji', required: false }
-            ]
-        },
-        {
-            name: 'set-welcome',
-            description: 'Définir le salon de bienvenue',
-            options: [{ name: 'salon', type: 7, description: 'Salon', required: true }]
-        },
-        {
-            name: 'server-info',
-            description: 'Afficher les stats du serveur'
-        },
-        {
-            name: '8ball',
-            description: 'Pose une question à ZTS',
-            options: [{ name: 'question', type: 3, description: 'Ta question', required: true }]
-        },
-        {
-            name: 'slowmode',
-            description: 'Changer le mode lent du salon',
-            options: [{ name: 'secondes', type: 4, description: 'Temps (0 pour off)', required: true }]
-        },
-        {
-            name: 'poll',
-            description: 'Lancer un sondage interactif',
-            options: [{ name: 'question', type: 3, description: 'La question', required: true }]
-        }
-    ];
+        // CONFIG & TICKETS
+        { name: 'setup-embed', description: 'Créer un embed ZTS', options: [{name:'salon', type:7, required:true}, {name:'titre', type:3, required:true}, {name:'desc', type:3, required:true}] },
+        { name: 'add-option', description: 'Ajouter Ticket/Rôle', options: [{name:'msg_id', type:3, required:true}, {name:'type', type:3, required:true, choices:[{name:'Ticket', value:'tk'}, {name:'Rôle', value:'rl'}]}, {name:'nom', type:3, required:true}, {name:'cible', type:8, required:true}] },
+        
+        // MODÉRATION
+        { name: 'nuke', description: 'Réinitialiser complètement un salon' },
+        { name: 'kick', description: 'Expulser un membre', options: [{name:'membre', type:6, required:true}, {name:'raison', type:3}] },
+        { name: 'set-logs', description: 'Salon des logs', options: [{name:'salon', type:7, required:true}] },
+        { name: 'set-autorole', description: 'Rôle automatique', options: [{name:'role', type:8, required:true}] },
 
+        // GIVEAWAY
+        { name: 'giveaway', description: 'Lancer un concours', options: [{name:'prix', type:3, required:true}, {name:'gagnants', type:4, required:true}] },
+
+        // FUN & SOCIAL
+        { name: 'rank', description: 'Voir ton niveau XP' },
+        { name: 'slap', description: 'Mettre une gifle', options: [{name:'membre', type:6, required:true}] },
+        { name: 'meme', description: 'Afficher un meme aléatoire' },
+        { name: 'join', description: 'Faire venir le bot en vocal' }
+    ];
     await client.application.commands.set(commands);
 });
 
-// --- SYSTÈME DE BIENVENUE ---
-client.on('guildMemberAdd', async member => {
-    if (!welcomeChannelId) return;
-    const channel = member.guild.channels.cache.get(welcomeChannelId);
-    if (!channel) return;
-
-    const welcomeEmbed = new EmbedBuilder()
-        .setTitle('👋 Bienvenue !')
-        .setDescription(`Bienvenue sur le serveur **${member.guild.name}**, ${member} !\nOn est maintenant **${member.guild.memberCount}** membres !`)
-        .setColor('#57F287')
-        .setThumbnail(member.user.displayAvatarURL())
-        .setTimestamp();
-
-    channel.send({ embeds: [welcomeEmbed] });
+// --- SYSTÈME XP ---
+client.on('messageCreate', m => {
+    if (m.author.bot || !m.guild) return;
+    let uXp = xp.get(m.author.id) || { xp: 0, level: 1 };
+    uXp.xp += 5;
+    if (uXp.xp >= uXp.level * 100) {
+        uXp.level++;
+        m.channel.send(`✨ GG ${m.author}, tu es passé niveau **${uXp.level}** !`);
+    }
+    xp.set(m.author.id, uXp);
 });
 
-client.on('interactionCreate', async interaction => {
-    if (interaction.isChatInputCommand()) {
+client.on('interactionCreate', async i => {
+    if (i.isChatInputCommand()) {
         
-        // --- SETUP WELCOME ---
-        if (interaction.commandName === 'set-welcome') {
-            welcomeChannelId = interaction.options.getChannel('salon').id;
-            return interaction.reply(`✅ Salon de bienvenue configuré sur <#${welcomeChannelId}>`);
+        // NUKE
+        if (i.commandName === 'nuke') {
+            if (!i.member.permissions.has(PermissionFlagsBits.ManageChannels)) return i.reply("Non.");
+            const newChan = await i.channel.clone();
+            await i.channel.delete();
+            return newChan.send("☢️ Salon atomisé et réinitialisé !");
         }
 
-        // --- SERVER INFO ---
-        if (interaction.commandName === 'server-info') {
-            const guild = interaction.guild;
-            const infoEmbed = new EmbedBuilder()
-                .setTitle(`Stats : ${guild.name}`)
-                .setThumbnail(guild.iconURL())
-                .addFields(
-                    { name: '👑 Propriétaire', value: `<@${guild.ownerId}>`, inline: true },
-                    { name: '👥 Membres', value: `${guild.memberCount}`, inline: true },
-                    { name: '📅 Création', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:D>`, inline: true }
-                )
-                .setColor('#2B2D31');
-            return interaction.reply({ embeds: [infoEmbed] });
+        // GIVEAWAY
+        if (i.commandName === 'giveaway') {
+            const prix = i.options.getString('prix');
+            const n = i.options.getInteger('gagnants');
+            const emb = new EmbedBuilder().setTitle('🎉 GIVEAWAY !').setDescription(`Prix : **${prix}**\nNombre de gagnants : **${n}**\n\nCliquez sur le bouton pour participer !`).setColor('Gold');
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('gw_join').setLabel('Participer !').setStyle(ButtonStyle.Primary).setEmoji('🎁'));
+            const msg = await i.reply({ embeds: [emb], components: [row], fetchReply: true });
+            giveaways.set(msg.id, { participants: [], prize: prix, winners: n });
         }
 
-        // --- 8BALL ---
-        if (interaction.commandName === '8ball') {
-            const reponses = ["Oui", "Non", "Peut-être", "C'est certain", "Oublie ça", "Demande plus tard"];
-            const rep = reponses[Math.floor(Math.random() * reponses.length)];
-            return interaction.reply(`🔮 **Question :** ${interaction.options.getString('question')}\n🎱 **Réponse :** ${rep}`);
+        // RANK
+        if (i.commandName === 'rank') {
+            const data = xp.get(i.user.id) || { xp: 0, level: 1 };
+            return i.reply(`📊 **${i.user.username}** | Niveau : **${data.level}** (${data.xp} XP)`);
         }
 
-        // --- POLL (SONDAGE) ---
-        if (interaction.commandName === 'poll') {
-            const question = interaction.options.getString('question');
-            const pollEmbed = new EmbedBuilder()
-                .setTitle('📊 Sondage ZTS')
-                .setDescription(`**${question}**\n\n✅ : 0 | ❌ : 0`)
-                .setColor('#00AEFF');
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('p_yes').setLabel('OUI').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('p_no').setLabel('NON').setStyle(ButtonStyle.Danger)
-            );
-            return interaction.reply({ embeds: [pollEmbed], components: [row] });
+        // SLAP
+        if (i.commandName === 'slap') {
+            const target = i.options.getUser('membre');
+            return i.reply(`🖐️ **${i.user.username}** met une énorme baffe à **${target.username}** !`);
         }
 
-        // --- SLOWMODE ---
-        if (interaction.commandName === 'slowmode') {
-            const sec = interaction.options.getInteger('secondes');
-            await interaction.channel.setRateLimitPerUser(sec);
-            return interaction.reply(`⏳ Mode lent réglé sur **${sec}** secondes.`);
-        }
-
-        // --- SETUP EMBED & ADD OPTION (Reprise du code d'avant) ---
-        if (interaction.commandName === 'setup-embed') {
-            const channel = interaction.options.getChannel('salon');
-            const embed = new EmbedBuilder()
-                .setTitle(interaction.options.getString('titre'))
-                .setDescription(interaction.options.getString('description'))
-                .setColor('#2B2D31');
+        // SETUP EMBED (Ticket/Role) - Toujours là !
+        if (i.commandName === 'setup-embed') {
+            const channel = i.options.getChannel('salon');
+            const embed = new EmbedBuilder().setTitle(i.options.getString('titre')).setDescription(i.options.getString('desc')).setColor('#2b2d31');
             await channel.send({ embeds: [embed] });
-            return interaction.reply({ content: "✅ OK", flags: MessageFlags.Ephemeral });
-        }
-
-        if (interaction.commandName === 'add-option') {
-            const msgId = interaction.options.getString('message_id');
-            const type = interaction.options.getString('type');
-            const label = interaction.options.getString('nom');
-            const role = interaction.options.getRole('cible');
-            try {
-                const message = await interaction.channel.messages.fetch(msgId);
-                let row = message.components[0] ? ActionRowBuilder.from(message.components[0]) : new ActionRowBuilder();
-                row.addComponents(new ButtonBuilder().setCustomId(`${type}_${role.id}_${label}`).setLabel(label).setStyle(type === 'tk' ? ButtonStyle.Primary : ButtonStyle.Secondary));
-                await message.edit({ components: [row] });
-                return interaction.reply({ content: "✅ Bouton ajouté !", flags: MessageFlags.Ephemeral });
-            } catch (e) { return interaction.reply({ content: "❌ ID Invalide", flags: MessageFlags.Ephemeral }); }
+            return i.reply({ content: "✅ Embed OK", flags: MessageFlags.Ephemeral });
         }
     }
 
-    // --- GESTION DES BOUTONS (TICKETS, ROLES, SONDAGES) ---
-    if (interaction.isButton()) {
-        // Sondage interactif
-        if (interaction.customId.startsWith('p_')) {
-            const isYes = interaction.customId === 'p_yes';
-            // On peut ajouter une logique de compteur ici si besoin
-            return interaction.reply({ content: "Vote pris en compte ! ✅", flags: MessageFlags.Ephemeral });
+    // --- LOGIQUE BOUTONS ---
+    if (i.isButton()) {
+        // GIVEAWAY JOIN
+        if (i.customId === 'gw_join') {
+            const gw = giveaways.get(i.message.id);
+            if (!gw) return i.reply({ content: "Expiré", flags: MessageFlags.Ephemeral });
+            if (gw.participants.includes(i.user.id)) return i.reply({ content: "Déjà inscrit !", flags: MessageFlags.Ephemeral });
+            gw.participants.push(i.user.id);
+            return i.reply({ content: "✅ Inscription validée !", flags: MessageFlags.Ephemeral });
         }
 
-        // Auto-rôle
-        if (interaction.customId.startsWith('rl_')) {
-            const rId = interaction.customId.split('_')[1];
-            if (interaction.member.roles.cache.has(rId)) {
-                await interaction.member.roles.remove(rId);
-                return interaction.reply({ content: "Rôle retiré !", flags: MessageFlags.Ephemeral });
-            } else {
-                await interaction.member.roles.add(rId);
-                return interaction.reply({ content: "Rôle ajouté !", flags: MessageFlags.Ephemeral });
-            }
-        }
-
-        // Ticket (Correction du modal crash)
-        if (interaction.customId.startsWith('tk_')) {
-            const [_, rId, lab] = interaction.customId.split('_');
-            const modal = new ModalBuilder().setCustomId(`mod_${rId}_${lab}`).setTitle(`Support : ${lab}`);
+        // TICKET MODAL (Correction interaction)
+        if (i.customId.startsWith('tk_')) {
+            const [_, roleId, label] = i.customId.split('_');
+            const modal = new ModalBuilder().setCustomId(`mod_${roleId}_${label}`).setTitle(`Support : ${label}`);
             const input = new TextInputBuilder().setCustomId('r').setLabel("Raison").setStyle(TextInputStyle.Paragraph).setRequired(true);
             modal.addComponents(new ActionRowBuilder().addComponents(input));
-            return await interaction.showModal(modal);
+            return await i.showModal(modal);
+        }
+
+        // AUTO-ROLE
+        if (i.customId.startsWith('rl_')) {
+            const rId = i.customId.split('_')[1];
+            if (i.member.roles.cache.has(rId)) {
+                await i.member.roles.remove(rId);
+                return i.reply({ content: "Rôle retiré.", flags: MessageFlags.Ephemeral });
+            } else {
+                await i.member.roles.add(rId);
+                return i.reply({ content: "Rôle ajouté !", flags: MessageFlags.Ephemeral });
+            }
         }
     }
 
-    // --- LOGIQUE MODAL TICKET ---
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('mod_')) {
-        const [_, rId, lab] = interaction.customId.split('_');
-        const reason = interaction.fields.getTextInputValue('r');
-
-        const chan = await interaction.guild.channels.create({
-            name: `zts-${lab}`,
+    // --- MODAL TICKET ---
+    if (i.isModalSubmit() && i.customId.startsWith('mod_')) {
+        const [_, rId, lab] = i.customId.split('_');
+        const reason = i.fields.getTextInputValue('r');
+        const chan = await i.guild.channels.create({
+            name: `ticket-${lab}`,
             type: ChannelType.GuildText,
             permissionOverwrites: [
-                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+                { id: i.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: i.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
                 { id: rId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
             ],
         });
-
-        await chan.send({ content: `<@&${rId}>`, embeds: [new EmbedBuilder().setTitle(lab).setDescription(`Auteur: ${interaction.user}\nRaison: ${reason}`).setColor('Blue')] });
-        return interaction.reply({ content: `✅ Ticket ouvert : ${chan}`, flags: MessageFlags.Ephemeral });
+        await chan.send({ content: `<@&${rId}>`, embeds: [new EmbedBuilder().setTitle(lab).setDescription(`Auteur: ${i.user}\nRaison: ${reason}`).setColor('Blue')] });
+        return i.reply({ content: `Ticket ouvert : ${chan}`, flags: MessageFlags.Ephemeral });
     }
 });
 
-// --- ANTI-CRASH GLOBAL ---
-process.on('unhandledRejection', (reason, promise) => {
-    console.error(' [ANTI-CRASH] Erreur détectée :', reason);
+// --- LOGS & AUTO-ROLE ---
+client.on('guildMemberAdd', member => {
+    if (autoRoleId) member.roles.add(autoRoleId).catch(() => {});
 });
 
+process.on('unhandledRejection', e => console.log('ERREUR CAPTURÉE :', e));
 client.login(process.env.BOT_TOKEN);
